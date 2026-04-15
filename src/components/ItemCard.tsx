@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star, MapPin } from "lucide-react";
+import { Star, MapPin, Circle } from "lucide-react";
 import { RentalItem } from "@/lib/sample-data";
 import { motion } from "framer-motion";
 
@@ -16,14 +16,23 @@ export default function ItemCard({ item, index = 0 }: ItemCardProps) {
       transition={{ delay: index * 0.1, duration: 0.4 }}
     >
       <Link to={`/item/${item.id}`} className="group block">
-        <div className="bg-card rounded-lg border border-border overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="aspect-[4/3] overflow-hidden">
+        <div className={`bg-card rounded-lg border border-border overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 ${!item.available ? 'opacity-75' : ''}`}>
+          <div className="aspect-[4/3] overflow-hidden relative">
             <img
               src={item.images[0]}
               alt={item.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               loading="lazy"
             />
+            {/* Availability Badge */}
+            <div className={`absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${
+              item.available 
+                ? 'bg-success/20 text-success border border-success/30' 
+                : 'bg-destructive/20 text-destructive border border-destructive/30'
+            }`}>
+              <Circle className={`h-2 w-2 fill-current ${item.available ? 'animate-pulse' : ''}`} />
+              {item.available ? 'Available' : 'Rented Out'}
+            </div>
           </div>
           <div className="p-4">
             <div className="flex items-center justify-between mb-1">
