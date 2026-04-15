@@ -1,14 +1,16 @@
 import { Link } from "react-router-dom";
-import { Search, ArrowRight, TrendingUp, Shield, Handshake } from "lucide-react";
+import { Search, ArrowRight, TrendingUp, Shield, Handshake, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ItemCard from "@/components/ItemCard";
-import { categories, sampleItems } from "@/lib/sample-data";
+import { categories, locations, sampleItems } from "@/lib/sample-data";
 import { motion } from "framer-motion";
 import { useState } from "react";
 
 const HeroSection = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("all");
 
   return (
     <section className="relative py-16 md:py-24 overflow-hidden">
@@ -32,12 +34,26 @@ const HeroSection = () => {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="What are you looking for? (e.g., power drill, camera)"
+                  placeholder="What are you looking for?"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger className="w-full md:w-44">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                    <SelectValue placeholder="Location" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Link to={`/explore${searchQuery ? `?q=${searchQuery}` : ""}`}>
                 <Button className="w-full md:w-auto">
                   Search <ArrowRight className="ml-2 h-4 w-4" />
