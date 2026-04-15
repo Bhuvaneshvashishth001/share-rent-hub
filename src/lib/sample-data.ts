@@ -16,8 +16,17 @@ export interface RentalItem {
   reviewCount: number;
   featured: boolean;
   trending: boolean;
+  available: boolean;
   createdAt: string;
 }
+
+export const locations = [
+  "Brooklyn, NY",
+  "Manhattan, NY",
+  "Queens, NY",
+  "Bronx, NY",
+  "Staten Island, NY",
+];
 
 export const categories = [
   { name: "Tools", icon: "🛠️", count: 245 },
@@ -45,6 +54,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 47,
     featured: true,
     trending: true,
+    available: true,
     createdAt: "2024-01-15",
   },
   {
@@ -61,6 +71,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 32,
     featured: true,
     trending: false,
+    available: true,
     createdAt: "2024-02-01",
   },
   {
@@ -77,6 +88,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 28,
     featured: true,
     trending: true,
+    available: false,
     createdAt: "2024-01-20",
   },
   {
@@ -93,6 +105,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 19,
     featured: false,
     trending: true,
+    available: true,
     createdAt: "2024-03-01",
   },
   {
@@ -109,6 +122,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 22,
     featured: false,
     trending: true,
+    available: true,
     createdAt: "2024-02-15",
   },
   {
@@ -125,6 +139,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 15,
     featured: true,
     trending: false,
+    available: false,
     createdAt: "2024-03-10",
   },
   {
@@ -141,6 +156,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 36,
     featured: true,
     trending: true,
+    available: true,
     createdAt: "2024-01-25",
   },
   {
@@ -157,6 +173,7 @@ export const sampleItems: RentalItem[] = [
     reviewCount: 41,
     featured: false,
     trending: true,
+    available: true,
     createdAt: "2024-02-20",
   },
 ];
