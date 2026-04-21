@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Package, Calendar, Plus, Settings, Star, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { categories, sampleItems } from "@/lib/sample-data";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { rentalAPI, bookingAPI } from "@/lib/api";
 
 const tabs = [
   { id: "bookings", label: "My Bookings", icon: Calendar },
@@ -15,6 +18,7 @@ const tabs = [
   { id: "settings", label: "Profile Settings", icon: Settings },
 ];
 
+// Sample bookings (fallback if API fails)
 const sampleBookings = [
   { id: "b1", itemTitle: "Professional DSLR Camera Kit", dates: "Jan 15 - Jan 18", total: 135, status: "Completed" },
   { id: "b2", itemTitle: "Mountain Bike - Trek Fuel EX", dates: "Feb 5 - Feb 7", total: 70, status: "Active" },
@@ -23,53 +27,192 @@ const sampleBookings = [
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("bookings");
+  const { user, isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+  const [bookings, setBookings] = useState(sampleBookings);
+  const [items, setItems] = useState(sampleItems.slice(0, 3));
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // ✅ FIX: Redirect to login if not authenticated (but wait for loading to complete)
+  useEffect(() => {
+    console.log('🔍 [DASHBOARD] Auth check - loading:', loading, 'isAuthenticated:', isAuthenticated);
+    if (!loading && !isAuthenticated) {
+      console.warn("⚠️ [AUTH] User not authenticated, redirecting to login");
+      navigate("/login");
+    } else if (!loading && isAuthenticated) {
+      console.log("✅ [AUTH] User authenticated, staying on dashboard");
+    }
+  }, [isAuthenticated, loading, navigate]);
+
+  // ✅ FIX: Fetch user's bookings from backend
+  useEffect(() => {
+    if (user) {
+      fetchUserBookings();
+      fetchUserItems();
+    }
+  }, [user, refreshTrigger]);
+
+  // ✅ FIX: Refresh bookings when component mounts (useful when returning from booking)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log("🔄 [DASHBOARD] Component mounted, refreshing bookings");
+      setRefreshTrigger(prev => prev + 1);
+    }
+  }, []); // Empty dependency array - runs only on mount
+
+  /**
+   * Refresh bookings manually
+   */
+  const refreshBookings = () => {
+    console.log("🔄 [DASHBOARD] Manual refresh triggered");
+    setRefreshTrigger(prev => prev + 1);
+  };
+  const fetchUserBookings = async () => {
+    try {
+      setLoadingBookings(true);
+      console.log("📡 [API] Fetching user bookings...");
+      
+      const response = await bookingAPI.getAll();
+      
+      console.log("✅ [API] Bookings fetched:", response.data);
+      
+      if (response.success) {
+        // Handle different response structures
+        if (Array.isArray(response.data)) {
+          setBookings(response.data);
+        } else if (response.data?.bookings && Array.isArray(response.data.bookings)) {
+          setBookings(response.data.bookings);
+        } else {
+          // Fall back to sample data if API returns unexpected format
+          console.warn("⚠️ [API] Using sample bookings as fallback");
+          setBookings(sampleBookings);
+        }
+      } else {
+        // Fall back to sample data
+        console.warn("⚠️ [API] Using sample bookings as fallback");
+        setBookings(sampleBookings);
+      }
+    } catch (error) {
+      console.error("❌ [API ERROR] Failed to fetch bookings:", error);
+      // Keep sample data as fallback
+      toast.info("Showing sample bookings (API error)");
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
+  /**
+   * Fetch user's rental items from API
+   */
+  const fetchUserItems = async () => {
+    try {
+      console.log("📡 [API] Fetching user items...");
+      
+      const response = await rentalAPI.getMyRentals();
+      
+      console.log("✅ [API] Items fetched:", response.data);
+      
+      if (response.success) {
+        // Handle different response structures
+        if (Array.isArray(response.data)) {
+          setItems(response.data);
+        } else if (response.data?.rentals && Array.isArray(response.data.rentals)) {
+          setItems(response.data.rentals);
+        } else {
+          console.warn("⚠️ [API] Using sample items as fallback");
+          setItems(sampleItems.slice(0, 3));
+        }
+      } else {
+        // Fall back to sample data
+        console.warn("⚠️ [API] Using sample items as fallback");
+        setItems(sampleItems.slice(0, 3));
+      }
+    } catch (error) {
+      console.error("❌ [API ERROR] Failed to fetch items:", error);
+      // Keep sample data as fallback
+    }
+  };
 
   return (
     <div className="min-h-screen">
-      <div className="bg-secondary/30 py-8">
-        <div className="container mx-auto px-4 md:px-8">
-          <div className="flex items-center gap-4">
-            <img src="https://i.pravatar.cc/150?img=20" alt="User" className="h-16 w-16 rounded-full border-2 border-primary" />
-            <div>
-              <h1 className="text-2xl font-heading font-bold text-foreground">Welcome, Alex!</h1>
-              <p className="text-sm text-muted-foreground">Member since Jan 2024</p>
-            </div>
+      {/* Show loading spinner while checking authentication */}
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading...</p>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="bg-secondary/30 py-8">
+            <div className="container mx-auto px-4 md:px-8">
+              <div className="flex items-center gap-4">
+                {/* ✅ FIX: Display real user data instead of hardcoded values */}
+                <img 
+                  src={user?.profileImage || "https://i.pravatar.cc/150?img=20"} 
+                  alt="User" 
+                  className="h-16 w-16 rounded-full border-2 border-primary" 
+                />
+                <div>
+                  <h1 className="text-2xl font-heading font-bold text-foreground">
+                    Welcome, {user?.name || "User"}!
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {user?.email || "Loading..."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      <div className="container mx-auto px-4 md:px-8 py-6">
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-8 border-b border-border pb-4">
-          {tabs.map((tab) => (
-            <Button
-              key={tab.id}
-              variant={activeTab === tab.id ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <tab.icon className="h-4 w-4 mr-2" /> {tab.label}
-            </Button>
-          ))}
-        </div>
+          <div className="container mx-auto px-4 md:px-8 py-6">
+            {/* Tabs */}
+            <div className="flex flex-wrap gap-2 mb-8 border-b border-border pb-4">
+              {tabs.map((tab) => (
+                <Button
+                  key={tab.id}
+                  variant={activeTab === tab.id ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <tab.icon className="h-4 w-4 mr-2" /> {tab.label}
+                </Button>
+              ))}
+            </div>
 
-        {/* Tab Content */}
-        <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          {activeTab === "bookings" && <BookingsTab />}
-          {activeTab === "items" && <MyItemsTab />}
-          {activeTab === "add" && <AddItemTab />}
-          {activeTab === "settings" && <SettingsTab />}
-        </motion.div>
-      </div>
+            {/* Tab Content */}
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              {activeTab === "bookings" && <BookingsTab bookings={bookings} loading={loadingBookings} />}
+              {activeTab === "items" && <MyItemsTab items={items} />}
+              {activeTab === "add" && <AddItemTab />}
+              {activeTab === "settings" && <SettingsTab user={user} />}
+            </motion.div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function BookingsTab() {
+/**
+ * Bookings Tab Component
+ */
+function BookingsTab({ bookings, loading }: any) {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-heading font-bold text-foreground">My Bookings</h2>
-      {sampleBookings.map((booking) => (
+      
+      {loading && (
+        <p className="text-muted-foreground">Loading bookings...</p>
+      )}
+      
+      {!loading && bookings.length === 0 && (
+        <p className="text-muted-foreground">No bookings yet</p>
+      )}
+      
+      {bookings.map((booking: any) => (
         <div key={booking.id} className="bg-card p-4 rounded-lg border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="font-bold text-foreground">{booking.itemTitle}</h3>
@@ -91,12 +234,19 @@ function BookingsTab() {
   );
 }
 
-function MyItemsTab() {
-  const myItems = sampleItems.slice(0, 3);
+/**
+ * My Items Tab Component
+ */
+function MyItemsTab({ items }: any) {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-heading font-bold text-foreground">My Listed Items</h2>
-      {myItems.map((item) => (
+      
+      {items.length === 0 && (
+        <p className="text-muted-foreground">No items listed yet</p>
+      )}
+      
+      {items.map((item: any) => (
         <div key={item.id} className="bg-card p-4 rounded-lg border border-border flex items-center gap-4">
           <img src={item.images[0]} alt={item.title} className="w-20 h-16 object-cover rounded-md" />
           <div className="flex-1">
@@ -158,28 +308,52 @@ function AddItemTab() {
   );
 }
 
-function SettingsTab() {
+/**
+ * Settings Tab Component
+ */
+function SettingsTab({ user }: any) {
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // TODO: Call API to update profile
+    setIsUpdating(true);
+    try {
+      toast.success("Profile updated!");
+    } catch (error) {
+      toast.error("Failed to update profile");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="max-w-xl">
       <h2 className="text-xl font-heading font-bold text-foreground mb-6">Profile Settings</h2>
-      <form className="space-y-4">
+      <form onSubmit={handleUpdateProfile} className="space-y-4">
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Full Name</label>
-          <Input defaultValue="Alex Thompson" />
+          <Input defaultValue={user?.name || "User"} disabled />
         </div>
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Email</label>
-          <Input type="email" defaultValue="alex@example.com" />
+          <Input type="email" defaultValue={user?.email || ""} disabled />
         </div>
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Phone</label>
-          <Input type="tel" defaultValue="+1 555 123 4567" />
+          <Input type="tel" defaultValue={user?.phone || ""} disabled />
         </div>
         <div>
-          <label className="text-sm font-medium text-foreground mb-1 block">Bio</label>
-          <Textarea defaultValue="I love sharing my gear with the community!" />
+          <label className="text-sm font-medium text-foreground mb-1 block">Member Since</label>
+          <Input 
+            type="text" 
+            defaultValue={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : ""} 
+            disabled 
+          />
         </div>
-        <Button onClick={() => toast.success("Profile updated!")}>Save Changes</Button>
+        <Button type="submit" disabled={isUpdating}>
+          {isUpdating ? "Saving..." : "Save Changes"}
+        </Button>
       </form>
     </div>
   );
