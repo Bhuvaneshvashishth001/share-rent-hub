@@ -116,6 +116,9 @@ export const authAPI = {
   login: (data: { email: string; password: string }) =>
     post('/auth/login', data),
 
+  googleLogin: (credential: string) =>
+    post('/auth/google', { credential }),
+
   getCurrentUser: () =>
     get('/auth/me'),
 
@@ -131,7 +134,7 @@ export const authAPI = {
  */
 export const rentalAPI = {
   getAll: () =>
-    get('/rentals'),
+    get('/rentals?limit=50'),
 
   getMyRentals: () =>
     get('/rentals/my-rentals/list'),
@@ -167,4 +170,24 @@ export const bookingAPI = {
 
   delete: (id: string) =>
     del(`/bookings/${id}`),
+
+  updateLocation: (id: string, data: { latitude?: number; longitude?: number; accuracy?: number; sharing: boolean }) =>
+    put(`/bookings/${id}/location`, data),
+
+  getLocation: (id: string) =>
+    get(`/bookings/${id}/location`),
+
+  getForMyRentals: () =>
+    get('/bookings/my-rentals/bookings'),
+};
+
+export const paymentAPI = {
+  createOrder: (bookingId: string) =>
+    post(`/payments/bookings/${bookingId}/order`, {}),
+
+  verify: (bookingId: string, data: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) => post(`/payments/bookings/${bookingId}/verify`, data),
 };

@@ -3,12 +3,15 @@ import { Star, MapPin, ArrowLeft, Calendar, Shield, MessageCircle, Loader2 } fro
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { sampleItems } from "@/lib/sample-data";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { rentalAPI, bookingAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { indiaLocations } from "@/lib/india-locations";
+import { payForBooking } from "@/lib/razorpay";
 
 interface Rental {
   _id: string;
@@ -38,6 +41,15 @@ export default function ItemDetail() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [requirements, setRequirements] = useState("");
+  const [deliveryLocation, setDeliveryLocation] = useState("");
+  const localToday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
   // Fetch rental data from API
   useEffect(() => {
@@ -68,8 +80,7 @@ export default function ItemDetail() {
     }
   }, [id]);
 
-  // Fallback to sample data if API fails (convert sample data structure to match API structure)
-  const item = rental || sampleItems.find((i) => i.id === id) as any;
+  const item = rental;
 
   if (loading) {
     return (
@@ -119,16 +130,20 @@ export default function ItemDetail() {
         rentalId: rental._id,
         startDate,
         endDate,
+        purpose,
+        requirements,
+        deliveryLocation: deliveryLocation || rental.location,
       });
 
       console.log("✅ [API] Booking created:", response.data);
-      toast.success(`Booking confirmed for ${days} day(s)! Total: $${total}`);
-
-      // Navigate to dashboard to see the booking
-      navigate("/dashboard");
-    } catch (error: any) {
+      const bookingId = response.data._id || response.data.id;
+      await payForBooking(bookingId, user || {}, () => {
+        toast.success(`Payment successful. Booking confirmed for ${days} day(s)!`);
+        navigate("/dashboard");
+      });
+    } catch (error: unknown) {
       console.error("❌ [API] Booking failed:", error);
-      toast.error(error.message || "Failed to create booking");
+      toast.error(error instanceof Error ? error.message : "Failed to create booking");
     } finally {
       setBookingLoading(false);
     }
@@ -169,7 +184,7 @@ export default function ItemDetail() {
           >
             <div className="aspect-square rounded-lg overflow-hidden bg-muted">
               <img
-                src={item.imageUrl || (item as any).images?.[0] || 'https://via.placeholder.com/500?text=No+Image'}
+                src={item.imageUrl || 'https://via.placeholder.com/500?text=No+Image'}
                 alt={item.title}
                 className="w-full h-full object-cover"
               />
@@ -194,7 +209,7 @@ export default function ItemDetail() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold text-primary">${item.pricePerDay}</p>
+                <p className="text-2xl font-bold text-primary">₹{item.pricePerDay}</p>
                 <p className="text-sm text-muted-foreground">per day</p>
               </div>
               <div className="text-right">
@@ -218,7 +233,7 @@ export default function ItemDetail() {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={localToday}
                   />
                 </div>
                 <div>
@@ -228,20 +243,40 @@ export default function ItemDetail() {
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate || new Date().toISOString().split('T')[0]}
+                    min={startDate || localToday}
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label>Delivery / handover location</Label>
+                <Select value={deliveryLocation} onValueChange={setDeliveryLocation}>
+                  <SelectTrigger><SelectValue placeholder={item.location} /></SelectTrigger>
+                  <SelectContent>
+                    {indiaLocations.map((location) => (
+                      <SelectItem key={location} value={location}>{location}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="purpose">What will you use it for?</Label>
+                <Input id="purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Event, travel, construction work..." />
+              </div>
+              <div>
+                <Label htmlFor="requirements">Special requirements</Label>
+                <Textarea id="requirements" value={requirements} onChange={(e) => setRequirements(e.target.value)} placeholder="Accessories, delivery time, setup help, or other details" />
               </div>
 
               {days > 0 && (
                 <div className="bg-background rounded-lg p-4 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span>${item.pricePerDay} × {days} day{days > 1 ? 's' : ''}</span>
-                    <span>${total}</span>
+                    <span>₹{item.pricePerDay} x {days} day{days > 1 ? 's' : ''}</span>
+                    <span>₹{total}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between font-semibold">
                     <span>Total</span>
-                    <span>${total}</span>
+                    <span>₹{total}</span>
                   </div>
                 </div>
               )}
@@ -257,7 +292,7 @@ export default function ItemDetail() {
                     Creating booking...
                   </>
                 ) : (
-                  `Book for $${total}`
+                  `Book & Pay ₹${total}`
                 )}
               </Button>
             </div>

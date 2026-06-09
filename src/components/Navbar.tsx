@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Sun, Moon, User } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { LogOut, Menu, X, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { authAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 const navLinks = [
   { label: "Home", path: "/" },
@@ -16,6 +19,20 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout();
+    } catch {
+      // Clear the local session even if the server is unavailable.
+    }
+    logout();
+    setMobileOpen(false);
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -50,12 +67,19 @@ export default function Navbar() {
           <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
           </Button>
-          <Link to="/login">
-            <Button variant="outline" size="sm">Log In</Button>
-          </Link>
-          <Link to="/register">
-            <Button variant="default" size="sm">Sign Up</Button>
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <span className="text-sm text-muted-foreground">{user?.name}</span>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />Log Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to="/login"><Button variant="outline" size="sm">Log In</Button></Link>
+              <Link to="/register"><Button variant="default" size="sm">Sign Up</Button></Link>
+            </>
+          )}
         </div>
 
         {/* Mobile */}
@@ -91,12 +115,20 @@ export default function Navbar() {
                 </Link>
               ))}
               <div className="flex gap-2 pt-2">
+                {isAuthenticated ? (
+                  <Button variant="outline" className="w-full" size="sm" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4 mr-2" />Log Out
+                  </Button>
+                ) : (
+                  <>
                 <Link to="/login" className="flex-1" onClick={() => setMobileOpen(false)}>
                   <Button variant="outline" className="w-full" size="sm">Log In</Button>
                 </Link>
                 <Link to="/register" className="flex-1" onClick={() => setMobileOpen(false)}>
                   <Button className="w-full" size="sm">Sign Up</Button>
                 </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

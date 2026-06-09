@@ -54,7 +54,7 @@ export default function ItemCard({ item, index = 0 }: ItemCardProps) {
             </div>
             <div className="flex items-center justify-between mt-3">
               <p className="font-bold text-foreground">
-                ${item.price}<span className="text-sm font-normal text-muted-foreground">/{item.priceUnit}</span>
+                ₹{item.price}<span className="text-sm font-normal text-muted-foreground">/{item.priceUnit}</span>
               </p>
               <div className="flex items-center gap-2">
                 <img src={item.owner.avatar} alt={item.owner.name} className="h-6 w-6 rounded-full" />

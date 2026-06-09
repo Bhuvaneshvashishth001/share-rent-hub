@@ -1,12 +1,62 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, MapPin, Filter } from "lucide-react";
+import { Loader2, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ItemCard from "@/components/ItemCard";
-import { categories, locations, sampleItems } from "@/lib/sample-data";
-import { motion } from "framer-motion";
+import { RentalItem } from "@/lib/sample-data";
+import { rentalAPI } from "@/lib/api";
+import { indiaLocations } from "@/lib/india-locations";
+import { toast } from "sonner";
+
+const rentalCategories = [
+  { label: "Cars", value: "car" },
+  { label: "Bikes", value: "bike" },
+  { label: "Rooms", value: "room" },
+  { label: "Equipment", value: "equipment" },
+  { label: "Other", value: "other" },
+];
+
+interface ApiRental {
+  _id: string;
+  title: string;
+  description: string;
+  pricePerDay: number;
+  category: string;
+  location: string;
+  imageUrl: string;
+  availability: boolean;
+  rating?: number;
+  reviewCount?: number;
+  createdAt: string;
+  owner?: {
+    name?: string;
+    profileImage?: string;
+  };
+}
+
+const toRentalItem = (rental: ApiRental): RentalItem => ({
+  id: rental._id,
+  title: rental.title,
+  description: rental.description,
+  price: rental.pricePerDay,
+  priceUnit: "day",
+  category: rental.category,
+  location: rental.location,
+  images: [rental.imageUrl],
+  owner: {
+    name: rental.owner?.name || "Rental owner",
+    avatar: rental.owner?.profileImage || "https://ui-avatars.com/api/?name=Rental+Owner",
+    rating: 0,
+  },
+  rating: rental.rating || 0,
+  reviewCount: rental.reviewCount || 0,
+  featured: false,
+  trending: false,
+  available: rental.availability,
+  createdAt: rental.createdAt,
+});
 
 export default function Explore() {
   const [searchParams] = useSearchParams();
@@ -15,22 +65,45 @@ export default function Explore() {
   const [sort, setSort] = useState(searchParams.get("sort") || "newest");
   const [location, setLocation] = useState("all");
   const [availability, setAvailability] = useState("all");
+  const [items, setItems] = useState<RentalItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const fetchRentals = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const response = await rentalAPI.getAll();
+      const rentals = response?.data?.rentals;
+      setItems(Array.isArray(rentals) ? rentals.map(toRentalItem) : []);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not load rentals";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRentals();
+  }, []);
 
   const filtered = useMemo(() => {
-    let items = [...sampleItems];
-    if (search) items = items.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase()));
-    if (category && category !== "all") items = items.filter((i) => i.category === category);
-    if (location && location !== "all") items = items.filter((i) => i.location === location);
-    if (availability === "available") items = items.filter((i) => i.available);
-    if (availability === "rented") items = items.filter((i) => !i.available);
-    if (sort === "price-low") items.sort((a, b) => a.price - b.price);
-    else if (sort === "price-high") items.sort((a, b) => b.price - a.price);
-    else if (sort === "rating") items.sort((a, b) => b.rating - a.rating);
-    else items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return items;
-  }, [search, category, sort, location, availability]);
+    let results = [...items];
+    if (search) results = results.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase()));
+    if (category && category !== "all") results = results.filter((i) => i.category === category);
+    if (location && location !== "all") results = results.filter((i) => i.location === location);
+    if (availability === "available") results = results.filter((i) => i.available);
+    if (availability === "rented") results = results.filter((i) => !i.available);
+    if (sort === "price-low") results.sort((a, b) => a.price - b.price);
+    else if (sort === "price-high") results.sort((a, b) => b.price - a.price);
+    else if (sort === "rating") results.sort((a, b) => b.rating - a.rating);
+    else results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return results;
+  }, [items, search, category, sort, location, availability]);
 
-  const availableCount = sampleItems.filter(i => i.available).length;
+  const availableCount = items.filter(i => i.available).length;
 
   return (
     <div className="min-h-screen">
@@ -57,8 +130,8 @@ export default function Explore() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.name} value={c.name}>{c.icon} {c.name}</SelectItem>
+                {rentalCategories.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -71,7 +144,7 @@ export default function Explore() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Locations</SelectItem>
-                {locations.map((loc) => (
+                {indiaLocations.map((loc) => (
                   <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                 ))}
               </SelectContent>
@@ -103,13 +176,24 @@ export default function Explore() {
 
       {/* Results */}
       <div className="container mx-auto px-4 md:px-8 py-8">
-        <p className="text-sm text-muted-foreground mb-6">{filtered.length} items found</p>
-        {filtered.length > 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-20">
+            <p className="text-xl text-muted-foreground">Rentals could not be loaded.</p>
+            <Button className="mt-4" onClick={fetchRentals}>Try Again</Button>
+          </div>
+        ) : filtered.length > 0 ? (
+          <>
+          <p className="text-sm text-muted-foreground mb-6">{filtered.length} items found</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filtered.map((item, i) => (
               <ItemCard key={item.id} item={item} index={i} />
             ))}
           </div>
+          </>
         ) : (
           <div className="text-center py-20">
             <p className="text-xl text-muted-foreground">No items found matching your criteria.</p>
