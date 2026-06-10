@@ -9,54 +9,7 @@ import { RentalItem } from "@/lib/sample-data";
 import { rentalAPI } from "@/lib/api";
 import { indiaLocations } from "@/lib/india-locations";
 import { toast } from "sonner";
-
-const rentalCategories = [
-  { label: "Cars", value: "car" },
-  { label: "Bikes", value: "bike" },
-  { label: "Rooms", value: "room" },
-  { label: "Equipment", value: "equipment" },
-  { label: "Other", value: "other" },
-];
-
-interface ApiRental {
-  _id: string;
-  title: string;
-  description: string;
-  pricePerDay: number;
-  category: string;
-  location: string;
-  imageUrl: string;
-  availability: boolean;
-  rating?: number;
-  reviewCount?: number;
-  createdAt: string;
-  owner?: {
-    name?: string;
-    profileImage?: string;
-  };
-}
-
-const toRentalItem = (rental: ApiRental): RentalItem => ({
-  id: rental._id,
-  title: rental.title,
-  description: rental.description,
-  price: rental.pricePerDay,
-  priceUnit: "day",
-  category: rental.category,
-  location: rental.location,
-  images: [rental.imageUrl],
-  owner: {
-    name: rental.owner?.name || "Rental owner",
-    avatar: rental.owner?.profileImage || "https://ui-avatars.com/api/?name=Rental+Owner",
-    rating: 0,
-  },
-  rating: rental.rating || 0,
-  reviewCount: rental.reviewCount || 0,
-  featured: false,
-  trending: false,
-  available: rental.availability,
-  createdAt: rental.createdAt,
-});
+import { categoryGroups, categoryMatches, parseRentalsResponse, rentalCategoryOptions, toRentalItem } from "@/lib/rentals";
 
 export default function Explore() {
   const [searchParams] = useSearchParams();
@@ -74,8 +27,7 @@ export default function Explore() {
     setLoadError("");
     try {
       const response = await rentalAPI.getAll();
-      const rentals = response?.data?.rentals;
-      setItems(Array.isArray(rentals) ? rentals.map(toRentalItem) : []);
+      setItems(parseRentalsResponse(response).map(toRentalItem));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Could not load rentals";
       setLoadError(message);
@@ -92,7 +44,7 @@ export default function Explore() {
   const filtered = useMemo(() => {
     let results = [...items];
     if (search) results = results.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase()));
-    if (category && category !== "all") results = results.filter((i) => i.category === category);
+    if (category && category !== "all") results = results.filter((i) => categoryMatches(i.category, category));
     if (location && location !== "all") results = results.filter((i) => i.location === location);
     if (availability === "available") results = results.filter((i) => i.available);
     if (availability === "rented") results = results.filter((i) => !i.available);
@@ -130,7 +82,10 @@ export default function Explore() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {rentalCategories.map((category) => (
+                {categoryGroups.map((category) => (
+                  <SelectItem key={category.name} value={category.name.toLowerCase()}>{category.name}</SelectItem>
+                ))}
+                {rentalCategoryOptions.map((category) => (
                   <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
                 ))}
               </SelectContent>

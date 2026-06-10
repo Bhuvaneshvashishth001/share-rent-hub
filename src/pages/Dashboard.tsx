@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { Package, Calendar, Plus, Settings, Star, MapPin } from "lucide-react";
+import { Package, Calendar, Plus, Settings, Star, MapPin, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { sampleItems } from "@/lib/sample-data";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +12,7 @@ import { rentalAPI, bookingAPI } from "@/lib/api";
 import { indiaLocations } from "@/lib/india-locations";
 import BookingLocationPanel from "@/components/BookingLocationPanel";
 import { payForBooking } from "@/lib/razorpay";
+import { rentalCategoryOptions } from "@/lib/rentals";
 
 const tabs = [
   { id: "bookings", label: "My Bookings", icon: Calendar },
@@ -34,7 +34,7 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(sampleBookings);
-  const [items, setItems] = useState(sampleItems.slice(0, 3));
+  const [items, setItems] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [ownerBookings, setOwnerBookings] = useState<any[]>([]);
@@ -134,17 +134,14 @@ export default function Dashboard() {
         } else if (response.data?.rentals && Array.isArray(response.data.rentals)) {
           setItems(response.data.rentals);
         } else {
-          console.warn("⚠️ [API] Using sample items as fallback");
-          setItems(sampleItems.slice(0, 3));
+          setItems([]);
         }
       } else {
-        // Fall back to sample data
-        console.warn("⚠️ [API] Using sample items as fallback");
-        setItems(sampleItems.slice(0, 3));
+        setItems([]);
       }
     } catch (error) {
       console.error("❌ [API ERROR] Failed to fetch items:", error);
-      // Keep sample data as fallback
+      setItems([]);
     }
   };
 
@@ -279,6 +276,43 @@ function BookingsTab({ bookings, loading, onPaid }: any) {
  */
 function MyItemsTab({ items, onUpdated }: { items: any[]; onUpdated: () => Promise<void> }) {
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [updatingAvailabilityId, setUpdatingAvailabilityId] = useState<string | null>(null);
+
+  const handleAvailabilityChange = async (item: any, availability: boolean) => {
+    const itemId = item._id || item.id;
+    if (!itemId) return toast.error("Item ID is missing");
+
+    setUpdatingAvailabilityId(itemId);
+    try {
+      await rentalAPI.update(itemId, { availability });
+      await onUpdated();
+      toast.success(availability ? "Item is available now" : "Item hidden from available rentals");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not update availability");
+    } finally {
+      setUpdatingAvailabilityId(null);
+    }
+  };
+
+  const handleDelete = async (item: any) => {
+    const itemId = item._id || item.id;
+    if (!itemId) return toast.error("Item ID is missing");
+    if (!window.confirm(`Remove "${item.title}" from your listings?`)) return;
+
+    setDeletingId(itemId);
+    try {
+      await rentalAPI.delete(itemId);
+      await onUpdated();
+      if ((editingItem?._id || editingItem?.id) === itemId) setEditingItem(null);
+      toast.success("Item removed successfully");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not remove item");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-heading font-bold text-foreground">My Listed Items</h2>
@@ -288,16 +322,44 @@ function MyItemsTab({ items, onUpdated }: { items: any[]; onUpdated: () => Promi
       )}
       
       {items.map((item: any) => (
-        <div key={item._id || item.id} className="bg-card p-4 rounded-lg border border-border flex items-center gap-4">
+        <div key={item._id || item.id} className="bg-card p-4 rounded-lg border border-border flex flex-col gap-4 sm:flex-row sm:items-center">
           <img src={item.imageUrl || item.images?.[0]} alt={item.title} className="w-20 h-16 object-cover rounded-md" />
           <div className="flex-1">
             <h3 className="font-bold text-foreground">{item.title}</h3>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <span>₹{item.pricePerDay || item.price}/day</span>
+              <span className={item.availability ?? item.available ? "text-success" : "text-destructive"}>
+                {item.availability ?? item.available ? "Available" : "Unavailable"}
+              </span>
               <span className="flex items-center gap-1"><Star className="h-3 w-3 fill-warning text-warning" /> {item.rating}</span>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setEditingItem(item)}>Edit</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={item.availability ?? item.available ? "available" : "unavailable"}
+              onValueChange={(value) => handleAvailabilityChange(item, value === "available")}
+              disabled={updatingAvailabilityId === (item._id || item.id)}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="unavailable">Unavailable</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => setEditingItem(item)}>Edit</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDelete(item)}
+              disabled={deletingId === (item._id || item.id)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              {deletingId === (item._id || item.id) ? "Removing..." : "Remove"}
+            </Button>
+          </div>
         </div>
       ))}
       {editingItem && (
@@ -369,11 +431,9 @@ function EditItemForm({ item, onCancel, onSaved }: { item: any; onCancel: () => 
           <Select value={form.category} onValueChange={(value) => update("category", value)}>
             <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="car">Car</SelectItem>
-              <SelectItem value="bike">Bike</SelectItem>
-              <SelectItem value="room">Room</SelectItem>
-              <SelectItem value="equipment">Equipment</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+              {rentalCategoryOptions.map((category) => (
+                <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -410,7 +470,7 @@ function EditItemForm({ item, onCancel, onSaved }: { item: any; onCancel: () => 
 }
 
 function AddItemTab({ onCreated }: { onCreated: () => void }) {
-  const [form, setForm] = useState({ title: "", description: "", pricePerDay: "", category: "", location: "", imageUrl: "" });
+  const [form, setForm] = useState({ title: "", description: "", pricePerDay: "", category: "", location: "", imageUrl: "", availability: true });
   const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,7 +485,7 @@ function AddItemTab({ onCreated }: { onCreated: () => void }) {
       setSubmitting(false);
     }
   };
-  const update = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const update = (key: string, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
 
   return (
     <div className="max-w-xl">
@@ -449,11 +509,9 @@ function AddItemTab({ onCreated }: { onCreated: () => void }) {
             <Select value={form.category} onValueChange={(value) => update("category", value)}>
               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="car">Car</SelectItem>
-                <SelectItem value="bike">Bike</SelectItem>
-                <SelectItem value="room">Room</SelectItem>
-                <SelectItem value="equipment">Equipment</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {rentalCategoryOptions.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -470,6 +528,16 @@ function AddItemTab({ onCreated }: { onCreated: () => void }) {
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Image URL</label>
           <Input required type="url" placeholder="https://..." value={form.imageUrl} onChange={(e) => update("imageUrl", e.target.value)} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1 block">Availability</label>
+          <Select value={form.availability ? "available" : "unavailable"} onValueChange={(value) => update("availability", value === "available")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="unavailable">Unavailable</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Listing..." : "List Item"}</Button>
       </form>

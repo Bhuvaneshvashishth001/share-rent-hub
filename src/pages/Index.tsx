@@ -1,12 +1,21 @@
 import { Link } from "react-router-dom";
-import { Search, ArrowRight, TrendingUp, Shield, Handshake, MapPin } from "lucide-react";
+import { Search, ArrowRight, TrendingUp, Shield, Handshake, MapPin, Car, Home, Package, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ItemCard from "@/components/ItemCard";
-import { categories, locations, sampleItems } from "@/lib/sample-data";
+import { locations, RentalItem } from "@/lib/sample-data";
+import { rentalAPI } from "@/lib/api";
+import { getCategoryCounts, parseRentalsResponse, toRentalItem } from "@/lib/rentals";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const categoryIcons = {
+  Car,
+  Home,
+  Package,
+  MoreHorizontal,
+};
 
 const HeroSection = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,7 +81,7 @@ const HeroSection = () => {
             </div>
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-accent" />
-              <span>10K+ Items Listed</span>
+              <span>Live Items Listed</span>
             </div>
           </div>
         </motion.div>
@@ -81,7 +90,9 @@ const HeroSection = () => {
   );
 };
 
-const CategoriesSection = () => (
+const CategoriesSection = ({ items }: { items: RentalItem[] }) => {
+  const categories = getCategoryCounts(items);
+  return (
   <section className="py-16 bg-secondary/30">
     <div className="container mx-auto px-4 md:px-8">
       <h2 className="text-3xl font-heading font-bold text-center text-foreground mb-10">
@@ -95,25 +106,39 @@ const CategoriesSection = () => (
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 }}
           >
+            {(() => {
+              const Icon = categoryIcons[cat.icon as keyof typeof categoryIcons];
+              return (
             <Link
-              to={`/explore?category=${cat.name}`}
+              to={`/explore?category=${cat.name.toLowerCase()}`}
               className="flex flex-col items-center p-6 bg-card rounded-lg border border-border hover:shadow-md hover:border-primary/50 transition-all group"
             >
-              <span className="text-3xl mb-3">{cat.icon}</span>
+              <Icon className="h-8 w-8 mb-3 text-primary" />
               <h3 className="font-heading font-bold text-foreground group-hover:text-primary transition-colors">
                 {cat.name}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">{cat.count} items</p>
             </Link>
+              );
+            })()}
           </motion.div>
         ))}
       </div>
     </div>
   </section>
+  );
+};
+
+const EmptyItems = ({ message }: { message: string }) => (
+  <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
+    {message}
+  </div>
 );
 
-const FeaturedSection = () => {
-  const featured = sampleItems.filter((i) => i.featured);
+const FeaturedSection = ({ items }: { items: RentalItem[] }) => {
+  const featured = items
+    .filter((item) => item.available)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return (
     <section className="py-16">
       <div className="container mx-auto px-4 md:px-8">
@@ -125,18 +150,24 @@ const FeaturedSection = () => {
             </Button>
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featured.slice(0, 6).map((item, i) => (
-            <ItemCard key={item.id} item={item} index={i} />
-          ))}
-        </div>
+        {featured.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featured.slice(0, 6).map((item, i) => (
+              <ItemCard key={item.id} item={item} index={i} />
+            ))}
+          </div>
+        ) : (
+          <EmptyItems message="No available items yet. Owner-added products will appear here." />
+        )}
       </div>
     </section>
   );
 };
 
-const TrendingSection = () => {
-  const trending = sampleItems.filter((i) => i.trending);
+const TrendingSection = ({ items }: { items: RentalItem[] }) => {
+  const trending = items
+    .filter((item) => item.available)
+    .sort((a, b) => (b.reviewCount - a.reviewCount) || (b.rating - a.rating) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return (
     <section className="py-16 bg-secondary/30">
       <div className="container mx-auto px-4 md:px-8">
@@ -151,11 +182,15 @@ const TrendingSection = () => {
             </Button>
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {trending.slice(0, 4).map((item, i) => (
-            <ItemCard key={item.id} item={item} index={i} />
-          ))}
-        </div>
+        {trending.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {trending.slice(0, 4).map((item, i) => (
+              <ItemCard key={item.id} item={item} index={i} />
+            ))}
+          </div>
+        ) : (
+          <EmptyItems message="Trending items will appear after available products receive usage or reviews." />
+        )}
       </div>
     </section>
   );
@@ -222,12 +257,29 @@ const CTASection = () => (
 );
 
 export default function Index() {
+  const [items, setItems] = useState<RentalItem[]>([]);
+
+  useEffect(() => {
+    const fetchRentals = async () => {
+      try {
+        const response = await rentalAPI.getAll();
+        setItems(parseRentalsResponse(response).map(toRentalItem));
+      } catch {
+        setItems([]);
+      }
+    };
+
+    fetchRentals();
+  }, []);
+
+  const availableItems = useMemo(() => items.filter((item) => item.available), [items]);
+
   return (
     <div>
       <HeroSection />
-      <CategoriesSection />
-      <FeaturedSection />
-      <TrendingSection />
+      <CategoriesSection items={availableItems} />
+      <FeaturedSection items={availableItems} />
+      <TrendingSection items={availableItems} />
       <HowItWorks />
       <CTASection />
     </div>
